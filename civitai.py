@@ -4,7 +4,6 @@ import pandas as pd
 import re
 import subprocess
 import time
-import urllib.parse
 
 # Get the directory of the script
 script_directory = os.path.dirname(os.path.abspath(__file__))
