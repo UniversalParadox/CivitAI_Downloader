@@ -85,6 +85,7 @@ civitai.py - Script itself
 
 wget.ext - https://www.gnu.org/software/wget/
 
+previous_directory.txt - Contains the default path where the creator folder will be stored and created. If nothing is given, script directory will be used instead.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
