@@ -1,4 +1,4 @@
 # HSTS 1.0 Known Hosts database for GNU Wget.
 # Edit at your own risk.
 # <hostname>	<port>	<incl. subdomains>	<created>	<max-age>
-civitai.com	0	1	1686195575	15724800
+civitai.com	0	1	1688963121	15724800

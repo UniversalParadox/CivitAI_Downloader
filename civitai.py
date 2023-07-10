@@ -5,119 +5,177 @@ import re
 import subprocess
 import time
 import urllib.parse
+from unidecode import unidecode
 
-# Get the directory of the script
+# List of required libraries
+required_libraries = ['requests', 'pandas', 'unidecode']
+
+# Check if all required libraries are installed
+missing_libraries = []
+for library in required_libraries:
+    try:
+        __import__(library)
+    except ImportError:
+        missing_libraries.append(library)
+
+if missing_libraries:
+    print("The following required libraries are missing:")
+    for library in missing_libraries:
+        print(library)
+    print("Please install the missing libraries and try again.")
+    exit(1)
+
+# Get the directory where the script is stored
 script_directory = os.path.dirname(os.path.abspath(__file__))
 
-url = "https://civitai.com/api/v1/models"
+# Check if the previous directory file exists
+previous_directory_file = os.path.join(script_directory, "previous_directory.txt")
+if os.path.exists(previous_directory_file):
+    with open(previous_directory_file, "r") as file:
+        previous_directory = file.read().strip()
+else:
+    previous_directory = ""
 
-# Get user input for the creator username
-creator_username = input("Enter the creator username: ")
+# Ask the user for the directory where the creator folders will be created
+creator_folders_directory = input(f"Enter the directory where the creator folders should be created (leave blank to use the previous directory: {previous_directory}): ")
+creator_folders_directory = creator_folders_directory.strip()
 
-# Create a directory for the creator's files
-folder_name = creator_username.replace(" ", "_")
-folder_path = os.path.join(script_directory, folder_name)
-os.makedirs(folder_path, exist_ok=True)
+# If no directory is provided, use the previous directory as the default
+if not creator_folders_directory:
+    creator_folders_directory = previous_directory
 
-# Check if the creator exists
-params = {
-    "creator.username": creator_username,
-    "page": 1
-}
-headers = {
-    "Content-Type": "application/json"
-}
+# Check if the provided directory exists
+if not os.path.isdir(creator_folders_directory):
+    print(f"The directory '{creator_folders_directory}' does not exist. Using the script directory instead.")
+    creator_folders_directory = script_directory
 
-response = requests.get(url, params=params, headers=headers)
+# Save the current directory as the previous directory
+with open(previous_directory_file, "w") as file:
+    file.write(creator_folders_directory)
 
-if response.status_code != 200:
-    print(f"That creator does not exist. Please try again.")
-    exit()
+base_url = "https://civitai.com/api/v1/models"
+creator_names = input("Enter the creator usernames (separated by commas): ").split(",")
 
-model_info = []
+for username in creator_names:
+    username = username.strip()
 
-page_count = 0
-max_pages = 10
-while params["page"] <= max_pages:
-    response = requests.get(url, params=params, headers=headers)
+    # Create a directory for the creator's files
+    creator_folder_name = username.replace(" ", "_")
+    creator_folder_path = os.path.join(creator_folders_directory, creator_folder_name)
+    os.makedirs(creator_folder_path, exist_ok=True)
 
-    if response.status_code == 200:
-        data = response.json()
+    # Check if the creator exists
+    params = {
+        "username": username,
+        "page": 1
+    }
+    headers = {
+        "Content-Type": "application/json"
+    }
 
-        if 'items' not in data or len(data['items']) == 0:
-            print("No more results found.")
-            break
+    response = requests.get(f"{base_url}?username={username}", headers=headers)
 
-        # Extract relevant information from the response data
-        items = data['items']
-        for item in items:
-            name = item['name']
-            item_type = item['type']
-            description = item['description']
-            if description is not None:
-                description = re.sub('<.*?>', '', description)  # Remove HTML tags
-                description = re.sub(r'\s+', ' ', description)  # Remove extra whitespace
-            latest_version = max(item['modelVersions'], key=lambda x: x['updatedAt'])
-            trained_words = latest_version.get('trainedWords')
-            files = latest_version.get('files', [])
-            download_url = next((file['downloadUrl'] for file in files), None)
+    if response.status_code != 200:
+        print(f"The creator '{username}' does not exist. Skipping...")
+        continue
 
-            images = latest_version.get('images')
-            meta_info = {}
-            if images:
-                meta = images.get('Meta', {})
-                meta_info = {k: v for k, v in meta.items()}
+    page_count = 0
+    max_pages = 10
+    model_info = []
+    while params["page"] <= max_pages:
+        response = requests.get(f"{base_url}?username={username}&page={params['page']}", headers=headers)
 
-            if download_url:
-                model_version_id = re.search(r'models/(\d+)', download_url)
-                if model_version_id:
-                    model_version_id = model_version_id.group(1)
-                    file_name = f"{name}_{model_version_id}.pt"  # Customize the file name as desired
-                    file_name_encoded = urllib.parse.quote(file_name)  # Encode the file name
-                    file_folder_name = file_name.rstrip('.pt')  # Extract the folder name from the file name
-                    file_folder_path = os.path.join(folder_path, file_folder_name)
-                    os.makedirs(file_folder_path, exist_ok=True)
-                    file_path = os.path.join(file_folder_path, file_name_encoded)
-                    print(f"Downloading file: {file_name}")
+        if response.status_code == 200:
+            data = response.json()
+
+            if 'items' not in data or len(data['items']) == 0:
+                print("No more results found.")
+                break
+
+            # Extract relevant information from the response data
+            items = data['items']
+            for item in items:
+                name = item['name']
+                item_type = item['type']
+                description = item['description']
+                latest_version = max(item['modelVersions'], key=lambda x: x['updatedAt'])
+                trained_words = latest_version.get('trainedWords')
+                files = latest_version.get('files', [])
+                download_url = next((file['downloadUrl'] for file in files), None)
+
+                if download_url:
+                    # Remove special characters and foreign language characters from the folder name
+                    model_folder_name = re.sub(r'[^\w\s-]', '', unidecode(name))
+                    model_folder_path = os.path.join(creator_folder_path, model_folder_name)
+                    os.makedirs(model_folder_path, exist_ok=True)
+
+                    file_name = urllib.parse.unquote(os.path.basename(urllib.parse.urlparse(download_url).path))
+                    file_path = os.path.join(model_folder_path, file_name)
+
+                    if os.path.exists(file_path):
+                        choice = input(f"The file '{file_name}' already exists in the directory. Do you want to overwrite it? (Y/N): ")
+                        if choice.strip().lower() != 'y':
+                            print(f"Skipping file '{file_name}'...")
+                            continue
+
+                    print(f"Downloading file for model: {name}")
                     try:
-                        subprocess.run(["wget", download_url, "--content-disposition", "-O", file_path], check=True)
-                        print(f"Download completed for file: {file_name}")
+                        subprocess.run(["wget", download_url, "--content-disposition", "-P", model_folder_path, "--quiet", "--show-progress"], check=True)
+                        print(f"Download completed for model: {name}")
                         time.sleep(5)  # Pause for 5 seconds
+
+                        # Create a DataFrame with the model information
+                        model_info.append({
+                            'Name': name,
+                            'Type': item_type,
+                            'Description': description,
+                            'Download URL': download_url,
+                            'Trained Words': trained_words
+                        })
+
                     except Exception as e:
-                        print(f"Failed to download file: {file_name}")
+                        print(f"Failed to download file for model: {name}")
                         print(f"Error: {e}")
                 else:
-                    print(f"Failed to extract model version ID from download URL: {download_url}")
-            else:
-                print(f"No download URL found for file: {name}")
+                    print(f"No download URL found for model: {name}")
 
-            model_info.append({
-                'Name': name,
-                'Type': item_type,
-                'Description': description,
-                'Download URL': download_url,
-                'Trained Words': trained_words,
-                **meta_info  # Add the extracted meta information as separate columns
-            })
+            params["page"] += 1
+            page_count += 1
 
-        params["page"] += 1
-        page_count += 1
+        else:
+            print("Request failed with status code:", response.status_code)
+            break
 
-    else:
-        print("Request failed with status code:", response.status_code)
-        break
+    # Create a master DataFrame from the model information
+    master_df = pd.DataFrame(model_info)
 
-# Create a DataFrame from the model information
-df = pd.DataFrame(model_info)
+    # Create the file path for the master CSV file in the creator's folder
+    master_csv_file_name = f"{username}_master_model_information.csv"
+    master_csv_file_path = os.path.join(creator_folder_path, master_csv_file_name)
 
-# Save the DataFrame to a CSV file within each folder
-for folder_name in os.listdir(folder_path):
-    folder_dir = os.path.join(folder_path, folder_name)
-    csv_file_path = os.path.join(folder_dir, f"{folder_name}_model_information.csv")
-    df.to_csv(csv_file_path, index=False)
+    # Save the master DataFrame to a CSV file
+    master_df.to_csv(master_csv_file_path, index=False)
+    print(f"Master CSV file created successfully with {page_count} pages for creator: {username}")
 
-print(f"CSV files created successfully with {page_count} pages.")
-print(f"Files and CSVs saved in the '{folder_name}' folder")
+    # Generate separate CSV files for each downloaded file
+    for index, row in master_df.iterrows():
+        name = row['Name']
+        model_folder_name = re.sub(r'[^\w\s-]', '', unidecode(name))
+        model_folder_path = os.path.join(creator_folder_path, model_folder_name)
+        csv_file_name = f"{name.replace(':', '_')}_model_information.csv"
+        csv_file_path = os.path.join(model_folder_path, csv_file_name)
+
+        # Filter the master DataFrame for the current model
+        model_data = master_df.loc[master_df['Name'] == name]
+
+       # Saving downloaded files
+
+        # Save the filtered DataFrame to a CSV file
+        model_data.to_csv(csv_file_path, index=False)
+        print(f"CSV file created successfully for model: {name}")
+
+    print(f"Files and CSVs saved in separate folders based on the model names, within the creator folder: {username}")
+    print(f"Master CSV file saved in the creator folder: {username}")
 
 # Pause before closing the script
 input("Press Enter to exit...")
