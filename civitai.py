@@ -58,12 +58,7 @@ creator_names = input("Enter the creator usernames (separated by commas): ").spl
 
 for username in creator_names:
     username = username.strip()
-
-    # Create a directory for the creator's files
-    creator_folder_name = username.replace(" ", "_")
-    creator_folder_path = os.path.join(creator_folders_directory, creator_folder_name)
-    os.makedirs(creator_folder_path, exist_ok=True)
-
+    
     # Check if the creator exists
     params = {
         "username": username,
@@ -78,6 +73,19 @@ for username in creator_names:
     if response.status_code != 200:
         print(f"The creator '{username}' does not exist. Skipping...")
         continue
+       
+    data = response.json()
+
+    if 'items' not in data or not data['items']:
+        print(f"No models found for the creator '{username}'. Skipping...")
+        continue
+
+    # Create a directory for the creator's files
+    creator_folder_name = username.replace(" ", "_")
+    creator_folder_path = os.path.join(creator_folders_directory, creator_folder_name)
+
+    if not os.path.isdir(creator_folder_path):
+        os.makedirs(creator_folder_path, exist_ok=True)
 
     page_count = 0
     max_pages = 10
@@ -119,10 +127,22 @@ for username in creator_names:
                             continue
 
                     print(f"Downloading file for model: {name}")
-                    try:
-                        subprocess.run(["wget", download_url, "--content-disposition", "-P", model_folder_path, "--quiet", "--show-progress"], check=True)
-                        print(f"Download completed for model: {name}")
-                        time.sleep(5)  # Pause for 5 seconds
+                    attempt = 1
+                    while True:
+                        try:
+                            subprocess.run(["wget", download_url, "--content-disposition", "-P", model_folder_path, "--quiet", "--show-progress"], check=True)
+                            print(f"Download completed for model: {name}")
+                            time.sleep(5)  # Pause for 5 seconds
+                        except Exception as e:
+                            print(f"Failed to download file for model: {name}")
+                            print(f"Error: {e}")
+                            if attempt >= 3:
+                                print(f"Maximum download attempts reached. Skipping model: {name}")
+                                break
+                            else:
+                                print(f"Retrying download after 15 seconds...")
+                                time.sleep(15)
+                                attempt += 1
 
                         # Create a DataFrame with the model information
                         model_info.append({
@@ -132,10 +152,6 @@ for username in creator_names:
                             'Download URL': download_url,
                             'Trained Words': trained_words
                         })
-
-                    except Exception as e:
-                        print(f"Failed to download file for model: {name}")
-                        print(f"Error: {e}")
                 else:
                     print(f"No download URL found for model: {name}")
 
