@@ -106,10 +106,13 @@ This is an example of how to list things you need to use the software and how to
   ```sh
   pip install pandas
   ```
-
+* unidecode
+  ```sh
+  pip install unidecode
+  ```
 ### Installation
 
-1. Clone the repo
+1. Clone the repo or download source code zip
    ```sh
    git clone https://github.com/UniversaParadox/CivitAI_Downloader.git
    ```
