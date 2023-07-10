@@ -56,6 +56,10 @@ with open(previous_directory_file, "w") as file:
 base_url = "https://civitai.com/api/v1/models"
 creator_names = input("Enter the creator usernames (separated by commas): ").split(",")
 
+# Keep track of downloaded file names
+downloaded_files = []
+
+
 for username in creator_names:
     username = username.strip()
     
@@ -120,6 +124,10 @@ for username in creator_names:
                     file_name = urllib.parse.unquote(os.path.basename(urllib.parse.urlparse(download_url).path))
                     file_path = os.path.join(model_folder_path, file_name)
 
+                    if file_name in downloaded_files:
+                        print(f"The file '{file_name}' has already been downloaded. Skipping...")
+                        continue
+
                     if os.path.exists(file_path):
                         choice = input(f"The file '{file_name}' already exists in the directory. Do you want to overwrite it? (Y/N): ")
                         if choice.strip().lower() != 'y':
@@ -127,25 +135,22 @@ for username in creator_names:
                             continue
 
                     print(f"Downloading file for model: {name}")
-                    attempt = 1
-                    while True:
-                        try:
+                    try:
+                            
+                            # Check if the file has already been downloaded
+                            if file_name in downloaded_files:
+                                print(f"The file '{file_name}' has already been downloaded. Skipping...")
+                                break
+                            
                             subprocess.run(["wget", download_url, "--content-disposition", "-P", model_folder_path, "--quiet", "--show-progress"], check=True)
                             print(f"Download completed for model: {name}")
                             time.sleep(5)  # Pause for 5 seconds
-                        except Exception as e:
+                    except Exception as e:
                             print(f"Failed to download file for model: {name}")
                             print(f"Error: {e}")
-                            if attempt >= 3:
-                                print(f"Maximum download attempts reached. Skipping model: {name}")
-                                break
-                            else:
-                                print(f"Retrying download after 15 seconds...")
-                                time.sleep(15)
-                                attempt += 1
-
+                           
                         # Create a DataFrame with the model information
-                        model_info.append({
+                    model_info.append({
                             'Name': name,
                             'Type': item_type,
                             'Description': description,
