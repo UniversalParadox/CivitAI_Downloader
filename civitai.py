@@ -4,6 +4,7 @@ import pandas as pd
 import re
 import subprocess
 import time
+import urllib.parse
 
 # Get the directory of the script
 script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +21,7 @@ os.makedirs(folder_path, exist_ok=True)
 
 # Check if the creator exists
 params = {
-    "username": creator_username,
+    "creator.username": creator_username,
     "page": 1
 }
 headers = {
@@ -36,7 +37,8 @@ if response.status_code != 200:
 model_info = []
 
 page_count = 0
-while params["page"] <= 10:
+max_pages = 10
+while params["page"] <= max_pages:
     response = requests.get(url, params=params, headers=headers)
 
     if response.status_code == 200:
@@ -59,13 +61,23 @@ while params["page"] <= 10:
             trained_words = latest_version.get('trainedWords')
             files = latest_version.get('files', [])
             download_url = next((file['downloadUrl'] for file in files), None)
+
+            images = latest_version.get('images')
+            meta_info = {}
+            if images:
+                meta = images.get('Meta', {})
+                meta_info = {k: v for k, v in meta.items()}
+
             if download_url:
                 model_version_id = re.search(r'models/(\d+)', download_url)
                 if model_version_id:
                     model_version_id = model_version_id.group(1)
                     file_name = f"{name}_{model_version_id}.pt"  # Customize the file name as desired
                     file_name_encoded = urllib.parse.quote(file_name)  # Encode the file name
-                    file_path = os.path.join(folder_path, file_name_encoded)
+                    file_folder_name = file_name.rstrip('.pt')  # Extract the folder name from the file name
+                    file_folder_path = os.path.join(folder_path, file_folder_name)
+                    os.makedirs(file_folder_path, exist_ok=True)
+                    file_path = os.path.join(file_folder_path, file_name_encoded)
                     print(f"Downloading file: {file_name}")
                     try:
                         subprocess.run(["wget", download_url, "--content-disposition", "-O", file_path], check=True)
@@ -84,7 +96,8 @@ while params["page"] <= 10:
                 'Type': item_type,
                 'Description': description,
                 'Download URL': download_url,
-                'Trained Words': trained_words
+                'Trained Words': trained_words,
+                **meta_info  # Add the extracted meta information as separate columns
             })
 
         params["page"] += 1
@@ -97,14 +110,14 @@ while params["page"] <= 10:
 # Create a DataFrame from the model information
 df = pd.DataFrame(model_info)
 
-# Create the file path for the CSV file in the creator's directory
-csv_file_name = f"{creator_username}_model_information.csv"
-csv_file_path = os.path.join(folder_path, csv_file_name)
+# Save the DataFrame to a CSV file within each folder
+for folder_name in os.listdir(folder_path):
+    folder_dir = os.path.join(folder_path, folder_name)
+    csv_file_path = os.path.join(folder_dir, f"{folder_name}_model_information.csv")
+    df.to_csv(csv_file_path, index=False)
 
-# Save the DataFrame to a CSV file
-df.to_csv(csv_file_path, index=False)
-print(f"CSV file created successfully with {page_count} pages.")
-print(f"Files and CSV saved in the '{folder_name}' folder")
+print(f"CSV files created successfully with {page_count} pages.")
+print(f"Files and CSVs saved in the '{folder_name}' folder")
 
 # Pause before closing the script
 input("Press Enter to exit...")
